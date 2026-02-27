@@ -1,0 +1,21 @@
+CREATE TABLE USERS IF NOT EXISTS (
+    user_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(50) NOT NULL UNIQUE,
+    hashed_pass VARCHAR(255) NOT NULL,
+)
+
+CREATE TABLE PROGRESS IF NOT EXISTS (
+    progress_id SERIAL PRIMARY KEY,
+    pages_read INTERGER NOT NULL,
+    user_id FOREIGN KEY REFERENCES USERS(user_id),
+    book_id FOREIGN KEY REFERENCES BOOKS(book_id),
+)
+
+CREATE TABLE USER_BOOKS IF NOT EXISTS (
+    user_book_id SERIAL PRIMARY KEY,
+    have_read BOOLEAN NOT NULL,
+    user_id FOREIGN KEY REFERENCES USERS(user_id),
+    book_id FOREIGN KEY REFERENCES BOOKS(book_id),
+)
