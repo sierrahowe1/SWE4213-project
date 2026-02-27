@@ -1,5 +1,6 @@
 const express = require('express');
 const amqp = require('amqplib');
+const authcheck = require('./auth');
 const app = express();
 
 const PORT = process.env.PORT || 3001;
