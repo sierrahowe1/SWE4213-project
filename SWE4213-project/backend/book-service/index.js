@@ -16,7 +16,6 @@ const pool = new Pool({
 });
 
 app.get('/health', async (req, res) => {
-  await waitForDB();
   res.status(200).json({ message: 'User service is running' });
 });
 
