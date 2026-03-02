@@ -16,7 +16,7 @@ const pool = new Pool({
 });
 
 app.get('/health', async (req, res) => {
-  res.status(200).json({ message: 'User service is running' });
+  res.status(200).json({ message: 'Book service is running' });
 });
 
 app.get('/books', async (req, res) => {
