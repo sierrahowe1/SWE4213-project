@@ -90,9 +90,34 @@ catch (err) {
 
 });
 
-app.post('/auth/register', (req, res) => {
-    const { username, password } = req.body;
-    res.json({ message: 'Filler register success message'});
+app.post('/auth/register', async (req, res) => {
+    try {
+        const { first_name, last_name, email, password } = req.body;
+        
+        if(!first_name || !last_name || !email || !password) {
+            return res.status(400).json({ error: 'All fields are required'});
+        }
+
+        const emailFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if(!emailFormat.test(email)) {
+            return res.status(400).json({ error: 'Invalid email format'});
+        }
+
+        if(password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters in length'});
+        }
+
+        console.log('Checking for existing user with email:', email);
+        const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+
+        if(existingUser.rows.length > 0) {
+            return res.status(400).json({ error: 'Email is already registered'});
+        }
+
+        console.log('Hashing password for email:', email);
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+    }
 
 });
 
