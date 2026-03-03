@@ -1,5 +1,4 @@
 const express = require('express');
-const amqp = require('amqplib');
 const authcheck = require('./auth');
 const app = express();
 const { Pool } = require('pg');
