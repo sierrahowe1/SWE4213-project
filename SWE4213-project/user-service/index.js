@@ -3,6 +3,8 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const authcheck = require('./auth');
+const { PrismaClient } = require('./generated/client');
+const prisma = new PrismaClient();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -187,6 +189,43 @@ app.put('/userBooks/:userId', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+app.get('/progress/:userId', async (req, res) => {
+    try {
+
+        if(parseInt(req.params.userId) === 0) {
+            return res.status(404).json({ error: 'You can only access your own progress'});
+        }
+
+        const progress = await prisma.progress.findMany({
+            where: {user_id: req.params.id},
+            select: {
+                progress_id: true,
+                book_id: true,
+                pages_read: true,
+                total_pages: true,
+                started_at: true,
+                completed_at: true
+
+            },
+            orderBy: { started_at: 'desc'}
+
+        });
+
+        res.json({
+            userId: req.params.userId,
+            progress
+        });
+    }
+    catch(err) {
+        console.error('Error fetching user progress:', err);
+        res.status(500).json({ error: 'Internal server error'});
+    }
+});
+
+
+
+
 
 app.listen(PORT, () => {
     console.log(`User service running on port ${PORT}`);
