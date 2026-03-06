@@ -223,6 +223,129 @@ app.get('/progress/:userId', async (req, res) => {
     }
 });
 
+app.post('/progress', async (req, res) => {
+    try {
+        const { title, total_pages} = req.body;
+
+        if(!title) {
+            return res.status(400).json({ error: 'Book title is required'});
+        }
+
+        const created = await prisma.progress.findUnqiue({
+            where: {
+                user_id_book_id: {
+                    user_id: req.params.id,
+                    book_id: book_id
+                }
+            }
+        });
+
+        if(created) {
+            return res.status(400).json({ error: 'Progress for this book is already being tracked.'});
+        }
+
+        const progress = await prisma.progress.create({
+            data: {
+                user_id: req.params.id,
+                book_id: book_id,
+                pages_read: 0,
+                total_pages: total_pages || 0,
+                status: 'Reading',
+                started_at: new Date()
+            }
+        });
+
+        res.status(201).json({
+            message: 'Progress successfully created',
+            progress
+        });
+
+    }
+    catch (err) {
+        console.error('Error creating progress entry:', err);
+        res.status(500).json({ error: 'Internal server error'});
+    }
+
+});
+
+app.put('progress/:userId/:bookId', async (req, res) => {
+    try {
+        if(parseInt(req.params.userId) === 0) {
+            return res.status(404).json({ error: 'You can only update your own progress.'});
+        }
+
+        const bookId = parseInt(req.params.bookId);
+
+        const { pages_read, status } = req.body;
+
+        if(pages_read === undefined && !status) {
+            return res.status(400).json({ error: 'At least one of pages_read or status must be provided.'});
+        }
+
+        const updatedProgress = await prisma.progress.findUnqiue({
+            where: {
+                user_id_book_id: {
+                    user_id: req.user.id,
+                    book_id: bookId
+                }
+            }
+        });
+
+        if(!progress) {
+            return res.status(404).json({ error: 'Progress entry not found for this book.'});
+        }
+
+        if(pages_read !== undefined) {
+            if(pages_read > progress.total_pages) {
+                return res.status(400).json({ error: 'Pages read cannot exceed total pages.'} );
+            }
+
+            updatedProgress.pages_read = pages_read;
+        }
+
+        if(status) {
+            const validStatuses = ['Reading', 'Completed', 'Paused'];
+            if(!validStatuses.includes(status)) {
+                return res.status(400).json({ error: `Invalid status. Valid options are: ${validStatuses.join(',')}`});
+            }
+
+            updatedProgress.status = status;
+        }
+
+        if(status === 'Completed' && updatedProgress.status !== 'Completed') {
+            updatedProgress.completed_at = new Date();
+        }
+
+        if(status !== 'Completed' && updatedProgress.status === 'Completed') {
+            updatedProgress.completed_at = null;
+        }
+
+        const savedProgress = await prisma.progress.update({
+            where: {
+                user_id_book_id: {
+                    user_id: req.user.id,
+                    book_id: bookId
+                }
+            },
+            data: updatedProgress
+        });
+
+        if(status === 'Completed' && updatedProgress.status !== 'Completed') {
+            await prisma.users.update({
+                where: { user_id: req.user.id},
+                data: {
+                    
+                }
+            })
+        }
+
+    }
+
+
+})
+
+
+
 
 
 

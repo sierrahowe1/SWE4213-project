@@ -41,7 +41,8 @@ model progress {
   pages_read       Int    @default(0)
   total_pages      Int    @default(0)
   yearly_goal      Int    @default(0)
-  books_read_this_year   Int   @default(0)
+  books_read_this_year    Int   @default(0)
+  status          String  @db.VarChar(50)
   stared_at        DateTime?   @db.Timestamp
   completed_at     DateTime?   @db.Timestamp
   users            users       @relation(fields: [user_id], reference: [user_id], onDelete: NoAction)
