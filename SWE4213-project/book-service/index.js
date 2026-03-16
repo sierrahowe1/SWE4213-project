@@ -40,33 +40,66 @@ app.get('/books/:id', async (req, res) => {
 });
 
 app.post('/books', async (req, res) => {
-  const { title, author, genre, summary, cover_url } = req.body;
+  const { title, author, genre, summary, total_pages, cover_url } = req.body;
 
   if (!title || !author) {
     return res.status(400).json({ error: 'Title and author are required' });
   }
 
   try {
+    const existingBook = await prisma.books.findFirst({
+      where: {
+        AND: [
+          { title: { equals: title, mode: 'insensitive' } },
+          { author: { equals: author, mode: 'insensitive' } }
+        ]
+      }
+    });
+
+    
+    if (existingBook) {
+      return res.status(409).json({ 
+        error: 'A book with the same title and author already exists',
+        existingBook: {
+          id: existingBook.book_id,
+          title: existingBook.title,
+          author: existingBook.author  
+        }
+      });
+    }
+
     const result = await prisma.books.create({
       data: {
         title: title,
         author: author,
         genre: genre,
+        total_pages: total_pages || 0,
         summary: summary,
         cover_url: cover_url,
       },
     });
-    res.status(200).json(result);
+    res.status(201).json(result);
   } catch (err) {
     console.error('Error creating book:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
+
 app.delete('/books/:id', async (req, res) => {
   const { id } = req.params;
+  const bookId = Number(id);
 
   try {
+
+        const book = await prisma.books.findUnique({
+          where: { book_id: bookId }
+        });
+
+        if(!book) {
+          return res.status(404).json({ error: "Book not found" });
+        }
+
         const result = await prisma.books.delete({
           where: {book_id: Number(id)}
         });

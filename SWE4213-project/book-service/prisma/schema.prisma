@@ -1,3 +1,4 @@
+//AI Use Statement: ChatGPT was used to debug Prisma setup.
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -6,7 +7,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated"
   engineType = "binary"
   previewFeatures = []
 }
@@ -20,6 +20,7 @@ model books {
   book_id Int @id @default(autoincrement())
   title String
   author String
+  total_pages Int
   genre String?
   summary String?
   cover_url String?

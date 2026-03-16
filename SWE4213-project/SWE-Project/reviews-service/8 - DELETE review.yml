@@ -1,0 +1,27 @@
+info:
+  name: 8 - DELETE review
+  type: http
+  seq: 8
+
+http:
+  method: DELETE
+  url: http://localhost:3003/reviews/1
+  headers:
+    - name: Authorization
+      value: Bearer {{token}}
+  auth: inherit
+
+runtime:
+  variables:
+    - name: token
+      value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwiZW1haWwiOiJ0ZXN0QHVuYi5jYSIsIm5hbWUiOiJTaWVycmEgSG93ZSIsImlhdCI6MTc3MzI1MjU5MCwiZXhwIjoxNzczMjU2MTkwfQ.NtSiJ0gikSCOiNJjwZw8PMHo8ocTcbRQP1M1Sl4Yfec
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
