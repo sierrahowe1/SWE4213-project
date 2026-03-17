@@ -57,11 +57,11 @@ app.get('/reviews', async (req, res) => {
 
 
 app.get('/reviews/:review_id', async (req, res) => {
-  const { id } = req.params;
+  const { review_id } = req.params;
 
   try {
     const review = await prisma.reviews.findUnique({
-      where: { review_id: Number(id) },
+      where: { review_id: Number(review_id) },
     });
     if (!review) {
       return res.status(404).json({ error: 'Review not found' });
@@ -165,7 +165,7 @@ app.post('/reviews', authcheck, async (req, res) => {
 
 
 app.put('/reviews/:user_id/:review_id', authcheck, async (req, res) => {
-  const { review_id } = req.params;
+  const { user_id, review_id } = req.params;
   const { rating, review_text } = req.body;
 
   if (rating !== undefined && (rating < 1 || rating > 5)) {
@@ -179,6 +179,10 @@ app.put('/reviews/:user_id/:review_id', authcheck, async (req, res) => {
 
     if (!existing) {
       return res.status(404).json({ error: 'Review not found' });
+    }
+
+    if(existing.user_id !== Number(user_id)) {
+      return res.status(403).json({ error: 'You can only update your own reviews' });
     }
 
     const data = {};
