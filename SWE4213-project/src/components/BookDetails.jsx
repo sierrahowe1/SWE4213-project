@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReviewCard from './ReviewCard';
 import { StarRating } from './BookCard';
+import { ArrowLeft, Plus } from 'lucide-react';
 
 const BookDetails = ({ book, user, onBack }) => {
     const [reviews, setReviews] = useState([]);
@@ -12,6 +13,7 @@ const BookDetails = ({ book, user, onBack }) => {
     const [submitError, setSubmitError] = useState('');
     const [userBookStatus, setUserBookStatus] = useState({ want_to_read: false, have_read: false });
     const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [showReviewForm, setShowReviewForm] = useState(false);
 
     const fetchBookData = async () => {
         try {
@@ -37,9 +39,14 @@ const BookDetails = ({ book, user, onBack }) => {
             );
             setUserNames(names);
 
-            // Fetch user book status
+            // Fetch user book status and progress
             if (user) {
-                const userBooksRes = await fetch(`/api/userBooks/${user.user_id}`);
+                const token = localStorage.getItem('token');
+
+                // User books
+                const userBooksRes = await fetch(`/api/userBooks/${user.user_id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 if (userBooksRes.ok) {
                     const userBooksData = await userBooksRes.json();
                     const currentStatus = userBooksData.books?.find((ub) => ub.book_id === book.book_id);
@@ -50,6 +57,8 @@ const BookDetails = ({ book, user, onBack }) => {
                         });
                     }
                 }
+
+
             }
         } catch (err) {
             console.error('Error fetching data:', err);
@@ -62,30 +71,114 @@ const BookDetails = ({ book, user, onBack }) => {
         fetchBookData();
     }, [book.book_id, user?.user_id]);
 
+    const addBookToUserList = async (token, statusObj) => {
+        // Try to add the book to user's list
+        const addRes = await fetch(`/api/userBooks/${user.user_id}/books`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                book_id: book.book_id,
+                want_to_read: statusObj.want_to_read,
+                have_read: statusObj.have_read
+            })
+        });
+
+        if (addRes.status === 409) {
+            // Already in list — update
+            await fetch(`/api/userBooks/${user.user_id}/books/${book.book_id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    want_to_read: statusObj.want_to_read,
+                    have_read: statusObj.have_read
+                })
+            });
+        }
+    };
+
+    const createProgressEntry = async (token) => {
+        // Create a progress entry for the book if one doesn't exist
+        try {
+            await fetch('/api/progress', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    book_id: book.book_id,
+                    total_pages: book.total_pages || 0
+                })
+            });
+        } catch (err) {
+            // May already exist → 409, that's fine
+        }
+    };
+
     const handleToggleStatus = async (type) => {
         setUpdatingStatus(true);
+        const token = localStorage.getItem('token');
         const newStatus = { ...userBookStatus };
 
         if (type === 'want') {
             newStatus.want_to_read = !newStatus.want_to_read;
-            if (newStatus.want_to_read) newStatus.have_read = false; // logic
+            if (newStatus.want_to_read) newStatus.have_read = false;
         } else if (type === 'read') {
             newStatus.have_read = !newStatus.have_read;
             if (newStatus.have_read) newStatus.want_to_read = false;
         }
 
         try {
-            const res = await fetch(`/api/userBooks/${user.user_id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    book_id: book.book_id,
-                    want_to_read: newStatus.want_to_read,
-                    have_read: newStatus.have_read
-                })
-            });
-            if (res.ok) {
-                setUserBookStatus(newStatus);
+            await addBookToUserList(token, newStatus);
+            setUserBookStatus(newStatus);
+
+            // When marking "Want to Read", create a progress entry so it shows in Profile
+            if (type === 'want' && newStatus.want_to_read) {
+                await createProgressEntry(token);
+            }
+
+            // When marking "Mark as Read", update progress to completed
+            if (type === 'read' && newStatus.have_read) {
+                await createProgressEntry(token);
+                try {
+                    await fetch(`/api/progress/${user.user_id}/${book.book_id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            pages_read: book.total_pages || 0,
+                            status: 'Completed'
+                        })
+                    });
+                } catch (err) {
+                    // ok
+                }
+            }
+
+            // When UN-marking "Mark as Read", revert progress to Reading
+            if (type === 'read' && !newStatus.have_read) {
+                try {
+                    await fetch(`/api/progress/${user.user_id}/${book.book_id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            status: 'Reading'
+                        })
+                    });
+                } catch (err) {
+                    // ok — progress entry may not exist
+                }
             }
         } catch (err) {
             console.error('Failed to update status', err);
@@ -100,11 +193,14 @@ const BookDetails = ({ book, user, onBack }) => {
         setSubmitting(true);
 
         try {
+            const token = localStorage.getItem('token');
             const response = await fetch('/api/reviews', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({
-                    user_id: user.user_id,
                     book_id: book.book_id,
                     rating: newRating,
                     review_text: newReviewText || undefined,
@@ -116,6 +212,7 @@ const BookDetails = ({ book, user, onBack }) => {
             if (response.ok) {
                 setNewRating(5);
                 setNewReviewText('');
+                setShowReviewForm(false);
                 fetchBookData();
             } else {
                 setSubmitError(data.error || 'Failed to submit review');
@@ -127,158 +224,198 @@ const BookDetails = ({ book, user, onBack }) => {
         }
     };
 
+
     const hasReviewed = reviews.some((r) => r.user_id === user?.user_id);
+    const avgRating = reviews.length > 0
+        ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+        : 0;
+
+
 
     return (
-        <div className="max-w-3xl mx-auto">
-            {/* Back button */}
-            <button
-                onClick={onBack}
-                className="flex items-center gap-2 text-gray-500 hover:text-gray-800 mb-6 transition-colors group"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:-translate-x-1 transition-transform">
-                    <path d="m15 18-6-6 6-6" />
-                </svg>
-                <span className="font-medium">Back to Dashboard</span>
-            </button>
+        <div className="min-h-screen bg-cream">
+            <div className="max-w-3xl mx-auto px-4 py-6">
+                {/* Back button */}
+                <button
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-gray-500 hover:text-gray-800 mb-6 transition-colors group"
+                >
+                    <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                    <span className="font-medium text-sm">Back to Dashboard</span>
+                </button>
 
-            {/* Book Header Card */}
-            <div className="bg-white rounded-2xl shadow-md p-6 mb-6 border border-gray-100">
-                <div className="flex gap-6">
-                    {/* Cover */}
-                    <div className="w-32 h-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-md">
-                        {book.cover_url ? (
-                            <img
-                                src={book.cover_url}
-                                alt={book.title}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    e.target.nextSibling.style.display = 'flex';
-                                }}
-                            />
-                        ) : null}
-                        <div
-                            className={`w-full h-full ${book.cover_url ? 'hidden' : 'flex'} items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40`}
-                        >
-                            <span className="text-4xl">📖</span>
+                {/* Book Hero Card */}
+                <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-8 mb-6 border border-gray-100">
+                    <div className="flex flex-col sm:flex-row gap-6">
+                        {/* Cover */}
+                        <div className="w-40 h-56 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 shadow-md mx-auto sm:mx-0">
+                            {book.cover_url ? (
+                                <img
+                                    src={book.cover_url}
+                                    alt={book.title}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                />
+                            ) : null}
+                            <div
+                                className={`w-full h-full ${book.cover_url ? 'hidden' : 'flex'} items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40`}
+                            >
+                                <span className="text-5xl">📖</span>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Info */}
-                    <div className="flex-1">
-                        <h1 className="text-2xl font-bold text-gray-800 mb-1">{book.title}</h1>
-                        <p className="text-gray-500 mb-3">by {book.author}</p>
-                        {book.summary && (
-                            <p className="text-gray-600 text-sm leading-relaxed">{book.summary}</p>
-                        )}
+                        {/* Info */}
+                        <div className="flex-1">
+                            {book.genre && (
+                                <span className="inline-block text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full mb-3 uppercase tracking-wider">
+                                    {book.genre}
+                                </span>
+                            )}
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1">{book.title}</h1>
+                            <p className="text-gray-500 mb-3 text-lg">by {book.author}</p>
 
-                        {/* Status Toggles */}
-                        {user && (
-                            <div className="flex gap-3 mt-4">
-                                <button
-                                    onClick={() => handleToggleStatus('want')}
-                                    disabled={updatingStatus}
-                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${userBookStatus.want_to_read
-                                        ? 'bg-primary text-white border-primary'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    {userBookStatus.want_to_read ? '✓ Want to Read' : '+ Want to Read'}
-                                </button>
-                                <button
-                                    onClick={() => handleToggleStatus('read')}
-                                    disabled={updatingStatus}
-                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${userBookStatus.have_read
-                                        ? 'bg-green-600 text-white border-green-600'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    {userBookStatus.have_read ? '✓ Finished Reading' : 'Mark as Read'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+                            {avgRating > 0 && (
+                                <div className="flex items-center gap-2 mb-3">
+                                    <StarRating rating={avgRating} size="md" />
+                                    <span className="text-sm text-gray-500">({avgRating.toFixed(1)} / 5)</span>
+                                </div>
+                            )}
 
-            {/* Add Review Form (if not already reviewed) */}
-            {user && !hasReviewed && (
-                <div className="bg-white rounded-2xl shadow-md p-6 mb-6 border border-gray-100">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Write a Review</h3>
+                            {book.summary && (
+                                <p className="text-gray-600 text-sm leading-relaxed mb-4">{book.summary}</p>
+                            )}
 
-                    <form onSubmit={handleSubmitReview} className="space-y-4">
-                        {submitError && (
-                            <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg">
-                                {submitError}
-                            </div>
-                        )}
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Your Rating</label>
-                            <div className="flex gap-1">
-                                {[1, 2, 3, 4, 5].map((star) => (
+                            {/* Status Toggles */}
+                            {user && (
+                                <div className="flex gap-3 flex-wrap mb-4">
                                     <button
-                                        key={star}
-                                        type="button"
-                                        onClick={() => setNewRating(star)}
-                                        className={`text-2xl transition-colors ${star <= newRating ? 'text-gold hover:text-gold-dim' : 'text-gray-300 hover:text-gold/50'
+                                        onClick={() => handleToggleStatus('want')}
+                                        disabled={updatingStatus}
+                                        className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${userBookStatus.want_to_read
+                                            ? 'bg-primary text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                             }`}
                                     >
-                                        ★
+                                        {userBookStatus.want_to_read ? '✓ Want to Read' : '+ Want to Read'}
                                     </button>
-                                ))}
-                            </div>
+                                    <button
+                                        onClick={() => handleToggleStatus('read')}
+                                        disabled={updatingStatus}
+                                        className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${userBookStatus.have_read
+                                            ? 'bg-green-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        {userBookStatus.have_read ? '✓ Finished Reading' : 'Mark as Read'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Your Review (optional)</label>
-                            <textarea
-                                placeholder="Share your thoughts about this book..."
-                                value={newReviewText}
-                                onChange={(e) => setNewReviewText(e.target.value)}
-                                rows={3}
-                                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all resize-none"
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={submitting}
-                            className="bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 px-6 rounded-lg transition-colors disabled:opacity-50"
-                        >
-                            {submitting ? 'Submitting...' : 'Submit Review'}
-                        </button>
-                    </form>
+                    </div>
                 </div>
-            )}
 
-            {/* Reviews List */}
-            <div>
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">
-                    Reviews {reviews.length > 0 && `(${reviews.length})`}
-                </h2>
+                {/* Reviews Section */}
+                <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-8 border border-gray-100">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold text-gray-800">
+                            Reviews {reviews.length > 0 && <span className="text-gray-400 font-normal">({reviews.length})</span>}
+                        </h2>
 
-                {loading ? (
-                    <div className="text-gray-400 animate-pulse text-center py-8">Loading reviews...</div>
-                ) : reviews.length === 0 ? (
-                    <div className="text-center py-10 text-gray-400">
-                        <span className="text-4xl block mb-3">💬</span>
-                        <p>No reviews yet. Be the first to review!</p>
+                        {user && !hasReviewed && !showReviewForm && (
+                            <button
+                                onClick={() => setShowReviewForm(true)}
+                                className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add a Review
+                            </button>
+                        )}
                     </div>
-                ) : (
-                    <div className="space-y-3">
-                        {reviews.map((review) => (
-                            <ReviewCard
-                                key={review.review_id}
-                                review={review}
-                                userName={userNames[review.user_id]}
-                                currentUser={user}
-                            />
-                        ))}
-                    </div>
-                )}
+
+                    {/* Add Review Form */}
+                    {showReviewForm && (
+                        <div className="bg-gray-50 rounded-xl p-5 mb-6 border border-gray-100">
+                            <h3 className="text-base font-semibold text-gray-800 mb-4">Write a Review</h3>
+
+                            <form onSubmit={handleSubmitReview} className="space-y-4">
+                                {submitError && (
+                                    <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 rounded-lg">
+                                        {submitError}
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Your Rating</label>
+                                    <StarRating
+                                        rating={newRating}
+                                        size="lg"
+                                        interactive={true}
+                                        onRate={setNewRating}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Your Review (optional)</label>
+                                    <textarea
+                                        placeholder="Share your thoughts about this book..."
+                                        value={newReviewText}
+                                        onChange={(e) => setNewReviewText(e.target.value)}
+                                        rows={3}
+                                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all resize-none bg-white"
+                                    />
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowReviewForm(false)}
+                                        className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-full hover:bg-gray-50 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 px-6 rounded-full transition-colors disabled:opacity-50 text-sm"
+                                    >
+                                        {submitting ? 'Submitting...' : 'Submit Review'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* Reviews List */}
+                    {loading ? (
+                        <div className="text-gray-400 text-center py-10">
+                            <div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-3"></div>
+                            Loading reviews...
+                        </div>
+                    ) : reviews.length === 0 ? (
+                        <div className="text-center py-12 text-gray-400">
+                            <span className="text-4xl block mb-3">💬</span>
+                            <p className="font-medium">No reviews yet</p>
+                            <p className="text-sm mt-1">Be the first to share your thoughts!</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {reviews.map((review) => (
+                                <ReviewCard
+                                    key={review.review_id}
+                                    review={review}
+                                    userName={userNames[review.user_id]}
+                                    currentUser={user}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
+
+
         </div>
     );
 };

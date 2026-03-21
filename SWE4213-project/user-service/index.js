@@ -472,10 +472,10 @@ app.put('/progress/:userId/:bookId', authcheck, async (req, res) => {
 
         const bookId = parseInt(req.params.bookId);
 
-        const { pages_read, status } = req.body;
+        const { pages_read, status, total_pages } = req.body;
 
-        if(pages_read === undefined && !status) {
-            return res.status(400).json({ error: 'At least one of pages_read or status must be provided.'});
+        if(pages_read === undefined && !status && total_pages === undefined) {
+            return res.status(400).json({ error: 'At least one of pages_read, status, or total_pages must be provided.'});
         }
 
         const progress = await prisma.progress.findUnique({
@@ -493,8 +493,16 @@ app.put('/progress/:userId/:bookId', authcheck, async (req, res) => {
 
         const updatedProgress = {};
 
+        if(total_pages !== undefined) {
+            if(total_pages < 0) {
+                return res.status(400).json({ error: 'Total pages cannot be negative.'});
+            }
+            updatedProgress.total_pages = total_pages;
+        }
+
         if(pages_read !== undefined) {
-            if(pages_read > progress.total_pages) {
+            const effectiveTotalPages = total_pages !== undefined ? total_pages : progress.total_pages;
+            if(effectiveTotalPages > 0 && pages_read > effectiveTotalPages) {
                 return res.status(400).json({ error: 'Pages read cannot exceed total pages.'} );
             }
 

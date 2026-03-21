@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StarRating } from './BookCard';
+import { ThumbsUp, MessageCircle } from 'lucide-react';
 
 const ReviewCard = ({ review, userName, currentUser }) => {
     const [likesCount, setLikesCount] = useState(0);
@@ -17,17 +18,28 @@ const ReviewCard = ({ review, userName, currentUser }) => {
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
         if (diffDays < 1) return 'Today';
-        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-        if (diffDays < 30) {
-            const weeks = Math.floor(diffDays / 7);
-            return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
-        }
-        if (diffDays < 365) {
-            const months = Math.floor(diffDays / 30);
-            return `${months} month${months > 1 ? 's' : ''} ago`;
-        }
-        const years = Math.floor(diffDays / 365);
-        return `${years} year${years > 1 ? 's' : ''} ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+        if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+        return `${Math.floor(diffDays / 365)}y ago`;
+    };
+
+    const getInitials = (name) => {
+        if (!name) return 'U';
+        return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    };
+
+    const getAvatarColor = (name) => {
+        const colors = [
+            'bg-primary/80 text-white',
+            'bg-blue-500 text-white',
+            'bg-purple-500 text-white',
+            'bg-amber-500 text-white',
+            'bg-rose-500 text-white',
+            'bg-emerald-500 text-white',
+        ];
+        const idx = (name || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        return colors[idx % colors.length];
     };
 
     useEffect(() => {
@@ -61,7 +73,6 @@ const ReviewCard = ({ review, userName, currentUser }) => {
                 const data = await res.json();
                 setComments(data);
 
-                // Fetch comment user names
                 const uniqueUserIds = [...new Set(data.map((c) => c.user_id))];
                 const names = {};
                 await Promise.all(
@@ -85,9 +96,8 @@ const ReviewCard = ({ review, userName, currentUser }) => {
     };
 
     const handleToggleLike = async () => {
-        if (!currentUser) return; // Must be logged in
+        if (!currentUser) return;
 
-        // Optimistic UI update
         const previouslyLiked = hasLiked;
         setHasLiked(!previouslyLiked);
         setLikesCount(prev => previouslyLiked ? prev - 1 : prev + 1);
@@ -99,7 +109,6 @@ const ReviewCard = ({ review, userName, currentUser }) => {
                 body: JSON.stringify({ user_id: currentUser.user_id })
             });
             if (!res.ok) {
-                // Revert on failure
                 setHasLiked(previouslyLiked);
                 setLikesCount(prev => previouslyLiked ? prev + 1 : prev - 1);
             }
@@ -133,7 +142,7 @@ const ReviewCard = ({ review, userName, currentUser }) => {
             });
             if (res.ok) {
                 setNewCommentText('');
-                fetchComments(); // Refresh comments list
+                fetchComments();
             }
         } catch (err) {
             console.error('Failed to post comment');
@@ -143,62 +152,66 @@ const ReviewCard = ({ review, userName, currentUser }) => {
     };
 
     return (
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between mb-2">
-                <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-semibold text-gray-800">{userName || 'User'} rated this book</span>
+        <div className="bg-white rounded-xl p-5 border border-gray-100 hover:shadow-sm transition-shadow">
+            <div className="flex items-start gap-3">
+                {/* User Avatar */}
+                <div className={`w-10 h-10 rounded-full ${getAvatarColor(userName)} flex items-center justify-center font-bold text-sm flex-shrink-0`}>
+                    {getInitials(userName)}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-gray-800 text-sm">{userName || 'User'}</span>
+                        <span className="text-xs text-gray-400">{timeAgo(review.created_at)}</span>
+                    </div>
+
+                    <div className="mb-2">
                         <StarRating rating={review.rating} size="sm" />
                     </div>
-                    <span className="text-xs text-gray-400">{timeAgo(review.created_at)}</span>
+
+                    {review.review_text && (
+                        <p className="text-gray-600 text-sm leading-relaxed">{review.review_text}</p>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-5 mt-3 pt-3 border-t border-gray-50">
+                        <button
+                            onClick={handleToggleLike}
+                            disabled={!currentUser}
+                            className={`flex items-center gap-1.5 text-sm transition-colors group ${hasLiked ? 'text-primary font-medium' : 'text-gray-400 hover:text-primary'} ${!currentUser && 'opacity-50 cursor-not-allowed'}`}
+                        >
+                            <ThumbsUp className={`w-4 h-4 group-hover:scale-110 transition-transform ${hasLiked ? 'fill-current' : ''}`} />
+                            {likesCount > 0 ? `${likesCount}` : 'Like'}
+                        </button>
+                        <button
+                            onClick={handleToggleComments}
+                            className={`flex items-center gap-1.5 text-sm transition-colors group ${showComments ? 'text-primary font-medium' : 'text-gray-400 hover:text-primary'}`}
+                        >
+                            <MessageCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                            {comments.length > 0 ? `${comments.length}` : 'Comment'}
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {review.review_text && (
-                <p className="text-gray-600 text-sm leading-relaxed mt-2">{review.review_text}</p>
-            )}
-
-            <div className="flex items-center gap-6 mt-3 pt-3 border-t border-gray-100">
-                <button
-                    onClick={handleToggleLike}
-                    disabled={!currentUser}
-                    className={`flex items-center gap-1.5 text-sm transition-colors group ${hasLiked ? 'text-primary' : 'text-gray-400 hover:text-primary'} ${!currentUser && 'opacity-50 cursor-not-allowed'}`}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill={hasLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                    {likesCount > 0 ? `${likesCount} Likes` : 'Like'}
-                </button>
-                <button
-                    onClick={handleToggleComments}
-                    className={`flex items-center gap-1.5 text-sm transition-colors group ${showComments ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform">
-                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-                    </svg>
-                    {comments.length > 0 ? `${comments.length} Comments` : 'Comment'}
-                </button>
-            </div>
-
+            {/* Comments Section */}
             {showComments && (
-                <div className="mt-4 pt-4 border-t border-gray-50 bg-gray-50/50 rounded-lg -mx-2 px-4 pb-2">
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Comments</h4>
-
+                <div className="mt-4 pt-4 border-t border-gray-50 ml-13 pl-3">
                     {comments.length === 0 ? (
-                        <p className="text-sm text-gray-500 italic mb-4">No comments yet. Be the first!</p>
+                        <p className="text-sm text-gray-400 italic mb-3">No comments yet</p>
                     ) : (
                         <div className="space-y-3 mb-4">
                             {comments.map(comment => (
-                                <div key={comment.comment_id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex gap-3 items-start">
-                                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                                        {(commentUserNames[comment.user_id] || 'U')[0]}
+                                <div key={comment.comment_id} className="flex gap-2.5 items-start">
+                                    <div className={`w-7 h-7 rounded-full ${getAvatarColor(commentUserNames[comment.user_id])} flex items-center justify-center font-bold text-[10px] flex-shrink-0`}>
+                                        {getInitials(commentUserNames[comment.user_id])}
                                     </div>
-                                    <div>
+                                    <div className="bg-gray-50 rounded-lg px-3 py-2 flex-1">
                                         <div className="flex items-baseline gap-2">
-                                            <span className="font-medium text-sm text-gray-800">{commentUserNames[comment.user_id] || 'User'}</span>
-                                            <span className="text-xs text-gray-400">{timeAgo(comment.created_at)}</span>
+                                            <span className="font-medium text-xs text-gray-800">{commentUserNames[comment.user_id] || 'User'}</span>
+                                            <span className="text-[10px] text-gray-400">{timeAgo(comment.created_at)}</span>
                                         </div>
-                                        <p className="text-sm text-gray-600 mt-1">{comment.comment_text}</p>
+                                        <p className="text-sm text-gray-600 mt-0.5">{comment.comment_text}</p>
                                     </div>
                                 </div>
                             ))}
@@ -212,19 +225,19 @@ const ReviewCard = ({ review, userName, currentUser }) => {
                                 value={newCommentText}
                                 onChange={(e) => setNewCommentText(e.target.value)}
                                 placeholder="Add a comment..."
-                                className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                                 disabled={submittingComment}
                             />
                             <button
                                 type="submit"
                                 disabled={submittingComment || !newCommentText.trim()}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-50"
                             >
                                 Post
                             </button>
                         </form>
                     ) : (
-                        <p className="text-xs text-gray-500 italic">Login to add a comment.</p>
+                        <p className="text-xs text-gray-400 italic">Login to add a comment.</p>
                     )}
                 </div>
             )}

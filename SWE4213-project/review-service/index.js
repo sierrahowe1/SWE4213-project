@@ -154,7 +154,8 @@ app.post('/reviews', authcheck, async (req, res) => {
 
     
     try {
-      const bookResponse = await fetch(`http://localhost:3002/books/${book_id}`);
+      const bookServiceUrl = process.env.BOOK_SERVICE_URL || 'http://localhost:3002';
+      const bookResponse = await fetch(`${bookServiceUrl}/books/${book_id}`);
       if (!bookResponse.ok) {
         return res.status(404).json({ error: 'Book not found' });
       }

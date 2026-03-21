@@ -6,7 +6,7 @@ const AuthContainer = ({ onLogin }) => {
     const [isLogin, setIsLogin] = useState(true);
 
     return (
-        <div style={{ marginTop: '50px' }}>
+        <div>
             {isLogin ? (
                 <Login onLogin={onLogin} onToggleView={() => setIsLogin(false)} />
             ) : (

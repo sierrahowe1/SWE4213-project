@@ -24,11 +24,12 @@ function App() {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
-          const userData = await response.json();
-          setUser(userData);
+          const data = await response.json();
+          setUser(data.user || data);
           setIsLoggedIn(true);
         } else {
           localStorage.removeItem('token');
+          localStorage.removeItem('user');
         }
       } catch (err) {
         console.error("Auth check failed:", err);
@@ -47,6 +48,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setIsLoggedIn(false);
     setUser(null);
     setCurrentPage('dashboard');
@@ -68,25 +70,34 @@ function App() {
     setCurrentPage('dashboard');
   };
 
-  if (authLoading) return <div style={{ padding: '20px' }}>Loading session...</div>;
+  if (authLoading) return (
+    <div className="min-h-screen bg-cream flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+        <span className="text-gray-600">Loading session...</span>
+      </div>
+    </div>
+  );
 
   return (
-    <div style={{ fontFamily: 'sans-serif', margin: 0, padding: 0 }}>
+    <div className="min-h-screen">
       {isLoggedIn && <Header user={user} onNavigate={handleNavigate} onLogout={handleLogout} />}
 
-      <main style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-        {!isLoggedIn ? (
-          <AuthContainer onLogin={handleLogin} />
-        ) : (
-          <>
-            {currentPage === 'dashboard' && <Dashboard onBookSelect={handleBookSelect} />}
-            {currentPage === 'profile' && <Profile user={user} />}
-            {currentPage === 'bookDetails' && selectedBook && (
-              <BookDetails book={selectedBook} user={user} onBack={handleBackToDashboard} />
-            )}
-          </>
-        )}
-      </main>
+      {!isLoggedIn ? (
+        <AuthContainer onLogin={handleLogin} />
+      ) : (
+        <>
+          {currentPage === 'dashboard' && (
+            <Dashboard onBookSelect={handleBookSelect} user={user} />
+          )}
+          {currentPage === 'profile' && (
+            <Profile user={user} />
+          )}
+          {currentPage === 'bookDetails' && selectedBook && (
+            <BookDetails book={selectedBook} user={user} onBack={handleBackToDashboard} />
+          )}
+        </>
+      )}
     </div>
   );
 }

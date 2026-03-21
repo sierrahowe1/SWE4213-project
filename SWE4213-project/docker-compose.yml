@@ -1,4 +1,16 @@
 services:
+  frontend:
+    build: .
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://gateway:3000
+    depends_on:
+      gateway:
+        condition: service_started
+    networks:
+      - app-network
+
   gateway:
     build: ./gateway
     ports:
@@ -64,6 +76,7 @@ services:
       - "3003:3003"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@review-db:5432/reviewdb
+      BOOK_SERVICE_URL: http://book-service:3002
     depends_on:
       review-db:
         condition: service_healthy
@@ -77,6 +90,8 @@ services:
 
   review-db:
     image: postgres:15-alpine
+    ports:
+      - "5434:5432"
     environment:
       POSTGRES_DB: reviewdb
       POSTGRES_USER: postgres
@@ -117,6 +132,8 @@ services:
 
   users-db:
     image: postgres:15-alpine
+    ports:
+      - "5435:5432"
     environment:
       POSTGRES_DB: usersdb
       POSTGRES_USER: postgres

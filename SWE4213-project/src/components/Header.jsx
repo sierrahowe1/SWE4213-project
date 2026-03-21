@@ -1,34 +1,52 @@
 import React from 'react';
-import AddBookModal from './AddBookModal';
+import { BookOpen, User, LogOut } from 'lucide-react';
 
 const Header = ({ onNavigate, onLogout, user }) => {
-    const [isAddBookOpen, setIsAddBookOpen] = React.useState(false);
-
-    const handleAddBook = (newBook) => {
-        console.log("New book added:", newBook);
-    };
-
-
-
     return (
-        <header style={{ padding: '10px 20px', borderBottom: '1px solid #ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ margin: 0, cursor: 'pointer' }} onClick={() => onNavigate('dashboard')}>Readily</h2>
-            <nav style={{ display: 'flex', gap: '15px' }}>
-                <button onClick={() => onNavigate('dashboard')}>Dashboard</button>
-                {user ? (
-                    <>
-                        <button onClick={() => setIsAddBookOpen(true)}>Add Book</button>
-                        <button onClick={() => onNavigate('profile')}>Profile</button>
-                        <button onClick={onLogout}>Logout</button>
-                    </>
-                ) : (
-                    <button onClick={onLogout}>Login</button>
-                )}
-            </nav>
-            <AddBookModal isOpen={isAddBookOpen} onClose={() => setIsAddBookOpen(false)} onBookAdded={handleAddBook} />
-        </header>
+        <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-30">
+            <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+                {/* Brand */}
+                <button
+                    onClick={() => onNavigate('dashboard')}
+                    className="flex items-center gap-2 group"
+                >
+                    <BookOpen className="w-6 h-6 text-primary group-hover:text-primary-dark transition-colors" />
+                    <h2 className="text-xl font-bold text-gray-800 group-hover:text-primary-dark transition-colors m-0">
+                        Readily
+                    </h2>
+                </button>
 
-                    
+                {/* Navigation */}
+                <nav className="flex items-center gap-1">
+                    <button
+                        onClick={() => onNavigate('dashboard')}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+                    >
+                        <BookOpen className="w-4 h-4" />
+                        <span className="hidden sm:inline">Dashboard</span>
+                    </button>
+
+                    {user && (
+                        <>
+                            <button
+                                onClick={() => onNavigate('profile')}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-primary hover:bg-primary/5 transition-all"
+                            >
+                                <User className="w-4 h-4" />
+                                <span className="hidden sm:inline">Profile</span>
+                            </button>
+                            <button
+                                onClick={onLogout}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-red-500 hover:bg-red-50 transition-all ml-1"
+                            >
+                                <LogOut className="w-4 h-4" />
+                                <span className="hidden sm:inline">Logout</span>
+                            </button>
+                        </>
+                    )}
+                </nav>
+            </div>
+        </header>
     );
 };
 
