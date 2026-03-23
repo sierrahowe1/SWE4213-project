@@ -6,11 +6,31 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    host: '0.0.0.0',
     proxy: {
-      '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:3000',
+      '/api/auth': {
+        target: 'http://localhost:3001',
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/auth/, '/auth')
+      },
+      '/api/users': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/users/, '/users')
+      },
+      '/api/userBooks': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/userBooks/, '/userBooks')
+      },
+      '/api/books': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/books/, '/books')
+      },
+      '/api/reviews': {
+        target: 'http://localhost:3003',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/reviews/, '/reviews')
       }
     }
   }
