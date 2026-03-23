@@ -102,24 +102,6 @@ const BookDetails = ({ book, user, onBack }) => {
         }
     };
 
-    const createProgressEntry = async (token) => {
-        // Create a progress entry for the book if one doesn't exist
-        try {
-            await fetch('/api/progress', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    book_id: book.book_id,
-                    total_pages: book.total_pages || 0
-                })
-            });
-        } catch (err) {
-            // May already exist → 409, that's fine
-        }
-    };
 
     const handleToggleStatus = async (type) => {
         setUpdatingStatus(true);
@@ -138,48 +120,6 @@ const BookDetails = ({ book, user, onBack }) => {
             await addBookToUserList(token, newStatus);
             setUserBookStatus(newStatus);
 
-            // When marking "Want to Read", create a progress entry so it shows in Profile
-            if (type === 'want' && newStatus.want_to_read) {
-                await createProgressEntry(token);
-            }
-
-            // When marking "Mark as Read", update progress to completed
-            if (type === 'read' && newStatus.have_read) {
-                await createProgressEntry(token);
-                try {
-                    await fetch(`/api/progress/${user.user_id}/${book.book_id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({
-                            pages_read: book.total_pages || 0,
-                            status: 'Completed'
-                        })
-                    });
-                } catch (err) {
-                    // ok
-                }
-            }
-
-            // When UN-marking "Mark as Read", revert progress to Reading
-            if (type === 'read' && !newStatus.have_read) {
-                try {
-                    await fetch(`/api/progress/${user.user_id}/${book.book_id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({
-                            status: 'Reading'
-                        })
-                    });
-                } catch (err) {
-                    // ok — progress entry may not exist
-                }
-            }
         } catch (err) {
             console.error('Failed to update status', err);
         } finally {
