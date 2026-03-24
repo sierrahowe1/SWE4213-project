@@ -12,7 +12,9 @@ const BookDetails = ({ book, user, onBack }) => {
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
     const [userBookStatus, setUserBookStatus] = useState({ want_to_read: false, have_read: false });
+    const [currentlyReading, setCurrentlyReading] = useState(false);
     const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [updatingProgress, setUpdatingProgress] = useState(false);
     const [showReviewForm, setShowReviewForm] = useState(false);
 
     const fetchBookData = async () => {
@@ -55,6 +57,16 @@ const BookDetails = ({ book, user, onBack }) => {
                             want_to_read: currentStatus.want_to_read,
                             have_read: currentStatus.have_read,
                         });
+                    }
+                }
+
+                const progressRes = await fetch(`/api/progress/${user.user_id}/${book.book_id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (progressRes.ok) {
+                    const progress = await progressRes.json();
+                    if(progress.progressWithPercentage.length != 0){
+                        setCurrentlyReading(true);
                     }
                 }
 
@@ -124,6 +136,44 @@ const BookDetails = ({ book, user, onBack }) => {
             console.error('Failed to update status', err);
         } finally {
             setUpdatingStatus(false);
+        }
+    };
+
+    const handleToggleProgress = async () => {
+        setUpdatingProgress(true);
+        const token = localStorage.getItem('token');
+        try {
+            if (currentlyReading === false) {
+                const addRes = await fetch(`/api/progress`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        book_id: book.book_id,
+                        total_pages: book.total_pages
+                    })
+                });
+                console.log(addRes);
+            }
+
+            else {
+                const delRes = await fetch(`/api/progress/${user.user_id}/${book.book_id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                console.log(delRes);
+            }
+
+            setCurrentlyReading(!currentlyReading);
+        } catch (err) {
+            console.error('Failed to update progress', err);
+        } finally {
+            setUpdatingProgress(false);
         }
     };
 
@@ -240,6 +290,16 @@ const BookDetails = ({ book, user, onBack }) => {
                                             }`}
                                     >
                                         {userBookStatus.want_to_read ? '✓ Want to Read' : '+ Want to Read'}
+                                    </button>
+                                    <button
+                                        onClick={() => handleToggleProgress()}
+                                        disabled={updatingProgress}
+                                        className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${currentlyReading
+                                            ? 'bg-green-600 text-white shadow-md'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        {currentlyReading ? '✓ Currently Reading' : 'Start Reading'}
                                     </button>
                                     <button
                                         onClick={() => handleToggleStatus('read')}

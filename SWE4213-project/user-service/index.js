@@ -417,6 +417,50 @@ app.get('/progress/:userId', authcheck, async (req, res) => {
     }
 });
 
+app.get('/progress/:userId/:bookId', authcheck, async (req, res) => {
+    try {
+
+        const userId = parseInt(req.params.userId);
+        const bookId = parseInt(req.params.bookId);
+
+        if(userId !== req.user.id) {
+            return res.status(403).json({ error: 'You can only access your own progress'});
+        }
+
+        const progress = await prisma.progress.findMany({
+            where: {user_id: userId, book_id: bookId},
+            select: {
+                progress_id: true,
+                book_id: true,
+                pages_read: true,
+                total_pages: true,
+                started_at: true,
+                completed_at: true
+
+            }
+        });
+
+        const progressWithPercentage = progress.map(item => ({
+            ...item,
+            percent_complete: item.total_pages > 0 
+                ? Math.round((item.pages_read / item.total_pages) * 100) 
+                : 0,
+            
+            progress_bar: '█'.repeat(Math.floor((item.pages_read / item.total_pages) * 10)) +
+                         '░'.repeat(10 - Math.floor((item.pages_read / item.total_pages) * 10))
+        }));
+
+        res.json({
+            userId: req.params.userId,
+            progressWithPercentage
+        });
+    }
+    catch(err) {
+        console.error('Error fetching user progress:', err);
+        res.status(500).json({ error: 'Internal server error'});
+    }
+});
+
 app.post('/progress', authcheck, async (req, res) => {
     try {
         const { book_id, total_pages} = req.body;
@@ -585,7 +629,7 @@ app.delete('/progress/:userId/:bookId', authcheck, async (req, res) => {
                 }
             }
         });
-
+        
         if(!progress) {
             return res.status(404).json({ error: 'Progress entry not found for this book.'});
         }

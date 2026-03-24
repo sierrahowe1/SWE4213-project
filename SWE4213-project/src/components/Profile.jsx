@@ -4,7 +4,9 @@ import { BookOpen, User as UserIcon } from 'lucide-react';
 
 const Profile = ({ user }) => {
     const [userBooks, setUserBooks] = useState([]);
+    const [progress, setProgress] = useState([]);
     const [bookDetails, setBookDetails] = useState({});
+    const [progBookDetails, setProgBookDetails] = useState({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -43,6 +45,37 @@ const Profile = ({ user }) => {
                     })
                 );
                 setBookDetails(details);
+
+                // Fetch progress
+                const progressRes = await fetch(`/api/progress/${user.user_id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                let progressData = [];
+                if (progressRes.ok) {
+                    const data = await progressRes.json();
+                    progressData = data.progressWithPercentage || [];
+                    setProgress(progressData);
+                }
+
+                // Fetch book details for progress
+                const progBookIds = [
+                    ...new Set(progressData.map(prog => prog.book_id))
+                ];
+
+                const progDetails = {};
+                await Promise.all(
+                    progBookIds.map(async (bookId) => {
+                        try {
+                            const bookRes = await fetch(`/api/books/${bookId}`);
+                            if (bookRes.ok) {
+                                progDetails[bookId] = await bookRes.json();
+                            }
+                        } catch (e) {
+                            // skip
+                        }
+                    })
+                );
+                setProgBookDetails(progDetails);
 
             } catch (err) {
                 console.error('Error fetching profile data:', err);
@@ -130,11 +163,50 @@ const Profile = ({ user }) => {
                         <span className="text-2xl">📚</span> Currently Reading
                     </h2>
 
-                    <div className="bg-white rounded-2xl shadow-sm p-8 border border-gray-100 text-center">
-                        <span className="text-4xl block mb-3">📖</span>
-                        <p className="text-gray-500">You're not reading anything right now.</p>
-                        <p className="text-gray-400 text-sm mt-1">Start tracking a book from the dashboard!</p>
-                    </div>
+                    {progress.length === 0 ? (
+                        <div className="bg-white rounded-2xl shadow-sm p-8 border border-gray-100 text-center">
+                            <span className="text-4xl block mb-3">📖</span>
+                            <p className="text-gray-500">You're not reading anything right now.</p>
+                            <p className="text-gray-400 text-sm mt-1">Start tracking a book from the dashboard!</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {progress.map((item) => {
+                                const book = progBookDetails[item.book_id];
+                                if (!book) return null;
+
+                                return (
+                                    <div key={item.book_id} className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+                                        <div className="flex gap-4 items-center">
+                                            {/* Cover */}
+                                            <div className="w-12 h-18 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
+                                                {book.cover_url ? (
+                                                    <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/40">
+                                                        <span className="text-xl">📖</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-bold text-gray-800 truncate text-sm">{book.title}</h3>
+                                                <p className="text-xs text-gray-500">by {book.author}</p>
+                                            </div>
+
+                                            <div className="mt-2 h-2 w-1/4 bg-gray-200 rounded-full overflow-hidden border-gray-300 border">
+                                                <div
+                                                className="h-full bg-green-500"
+                                                style={{ width: `${item.percent_complete}%` }}
+                                                />
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">{item.percent_complete}% completed</p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* Books Read */}
