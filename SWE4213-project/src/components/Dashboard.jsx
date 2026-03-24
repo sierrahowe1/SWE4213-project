@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Search, Bell, SlidersHorizontal } from 'lucide-react';
 import BookCard from './BookCard';
 import AddBookModal from './AddBookModal';
+import NotificationModal from './NotificationModal'
 
 const Dashboard = ({ onBookSelect, user }) => {
     const [books, setBooks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
+    const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
     const [bookRatings, setBookRatings] = useState({});
     const [userBookStatuses, setUserBookStatuses] = useState({});
     const [sortBy, setSortBy] = useState('title');
@@ -148,7 +150,10 @@ const Dashboard = ({ onBookSelect, user }) => {
                         </div>
 
                         {/* Notification Bell */}
-                        <button className="relative p-3.5 rounded-full bg-white/90 hover:bg-white transition-colors shadow-sm">
+                        <button 
+                            onClick={() => setIsNotificationModalOpen(true)}
+                            className="relative p-3.5 rounded-full bg-white/90 hover:bg-white transition-colors shadow-sm"
+                        >
                             <Bell className="w-5 h-5 text-gray-700" />
                             <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full"></span>
                         </button>
@@ -192,6 +197,13 @@ const Dashboard = ({ onBookSelect, user }) => {
                 isOpen={isAddBookModalOpen}
                 onClose={() => setIsAddBookModalOpen(false)}
                 onBookAdded={handleBookAdded}
+            />
+
+            {/* Notification Modal */}
+            <NotificationModal
+                isOpen={isNotificationModalOpen}
+                onClose={() => setIsNotificationModalOpen(false)}
+                user={user}
             />
         </>
     );
