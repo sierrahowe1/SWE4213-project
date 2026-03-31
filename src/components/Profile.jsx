@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Target } from 'lucide-react';
 import UpdateProgressModal from './UpdateProgressModal';
 
-const Profile = ({ user }) => {
+const Profile = ({ user, onUserUpdated }) => {
     const [userBooks, setUserBooks] = useState([]);
     const [progress, setProgress] = useState([]);
     const [bookDetails, setBookDetails] = useState({});
@@ -11,6 +11,14 @@ const Profile = ({ user }) => {
     const [wantToReadBooks, setWantToReadBooks] = useState([]);
     const [updatingProgress, setUpdatingProgress] = useState(false);
     const [bookUpdating, setBookUpdating] = useState(0);
+    const [goalInput, setGoalInput] = useState('');
+    const [goalSaving, setGoalSaving] = useState(false);
+    const [goalMessage, setGoalMessage] = useState('');
+
+    useEffect(() => {
+        if (!user) return;
+        setGoalInput(String(user.yearly_goal ?? 0));
+    }, [user?.user_id, user?.yearly_goal]);
 
     useEffect(() => {
         if (!user) return;
@@ -19,7 +27,7 @@ const Profile = ({ user }) => {
         const fetchData = async () => {
             try {
                 // ========== STEP 1: FETCH USER BOOKS ==========
-                const userBooksRes = await fetch(`http://localhost:3001/userBooks/${user.user_id}`, {
+                const userBooksRes = await fetch(`/api/userBooks/${user.user_id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
@@ -39,7 +47,7 @@ const Profile = ({ user }) => {
                 await Promise.all(
                     completedBookIds.map(async (bookId) => {
                         try {
-                            const bookRes = await fetch(`http://localhost:3002/books/${bookId}`);
+                            const bookRes = await fetch(`/api/books/${bookId}`);
                             if (bookRes.ok) {
                                 details[bookId] = await bookRes.json();
                             }
@@ -59,7 +67,7 @@ const Profile = ({ user }) => {
                 await Promise.all(
                     wantToReadIds.map(async (bookId) => {
                         try {
-                            const bookRes = await fetch(`http://localhost:3002/books/${bookId}`);
+                            const bookRes = await fetch(`/api/books/${bookId}`);
                             if (bookRes.ok) {
                                 const bookData = await bookRes.json();
                                 wantToReadDetails.push(bookData);
@@ -72,7 +80,7 @@ const Profile = ({ user }) => {
                 setWantToReadBooks(wantToReadDetails);
 
                 // ========== STEP 4: FETCH PROGRESS ==========
-                const progressRes = await fetch(`http://localhost:3001/progress/${user.user_id}`, {
+                const progressRes = await fetch(`/api/progress/${user.user_id}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
@@ -90,7 +98,7 @@ const Profile = ({ user }) => {
                 await Promise.all(
                     progBookIds.map(async (bookId) => {
                         try {
-                            const bookRes = await fetch(`http://localhost:3002/books/${bookId}`);
+                            const bookRes = await fetch(`/api/books/${bookId}`);
                             if (bookRes.ok) {
                                 progDetails[bookId] = await bookRes.json();
                             }
@@ -117,21 +125,63 @@ const Profile = ({ user }) => {
     };
 
     const completedBooks = userBooks.filter(ub => ub.have_read);
-    const totalBooksRead = user?.books_read_this_year || completedBooks.length;
+    const booksThisYear = Number(user?.books_read_this_year) || 0;
+    const yearlyGoal = Number(user?.yearly_goal) || 0;
+    const goalProgressPct =
+        yearlyGoal > 0 ? Math.min(100, Math.round((booksThisYear / yearlyGoal) * 100)) : 0;
     const readingNowCount = progress.length;
 
-    const handleProgressUpdated = async (newProgress) => {
+    const handleSaveYearlyGoal = async (e) => {
+        e?.preventDefault?.();
+        setGoalMessage('');
+        const n = parseInt(goalInput, 10);
+        if (!Number.isFinite(n) || n < 0) {
+            setGoalMessage('Enter a valid non-negative number.');
+            return;
+        }
+        setGoalSaving(true);
         const token = localStorage.getItem('token');
-        const progressRes = await fetch(`http://localhost:3001/progress/${user.user_id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+        try {
+            const url = `/api/users/${user.user_id}/yearly-goal`;
+            const opts = {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ yearly_goal: n }),
+            };
+            let res = await fetch(url, opts);
+            if (res.status === 404 || res.status === 405) {
+                res = await fetch(url, { ...opts, method: 'PUT' });
+            }
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                setGoalMessage('Goal saved.');
+                if (typeof onUserUpdated === 'function') await onUserUpdated();
+            } else {
+                setGoalMessage(data.error || 'Could not save goal.');
+            }
+        } catch {
+            setGoalMessage('Could not connect to the server.');
+        } finally {
+            setGoalSaving(false);
+        }
+    };
+
+    const handleProgressUpdated = async () => {
+        const token = localStorage.getItem('token');
+        const progressRes = await fetch(`/api/progress/${user.user_id}`, {
+            headers: { Authorization: `Bearer ${token}` },
         });
-                
+
         let progressData = [];
         if (progressRes.ok) {
             const data = await progressRes.json();
             progressData = data.progressWithPercentage || [];
             setProgress(progressData);
         }
+        if (typeof onUserUpdated === 'function') await onUserUpdated();
     };
 
     if (!user) return (
@@ -169,14 +219,23 @@ const Profile = ({ user }) => {
                                 <p className="text-gray-500 mb-4">{user.email}</p>
 
                                 {/* Stats */}
-                                <div className="flex gap-6 justify-center sm:justify-start">
+                                <div className="flex flex-wrap gap-6 justify-center sm:justify-start">
                                     <div className="flex items-center gap-2">
                                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                                             <BookOpen className="w-5 h-5 text-primary" />
                                         </div>
                                         <div>
-                                            <p className="text-xl font-bold text-gray-800">{totalBooksRead}</p>
-                                            <p className="text-xs text-gray-500">Books Read</p>
+                                            <p className="text-xl font-bold text-gray-800">{booksThisYear}</p>
+                                            <p className="text-xs text-gray-500">Read this year</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                                            <span className="text-emerald-600 text-lg">✓</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-xl font-bold text-gray-800">{completedBooks.length}</p>
+                                            <p className="text-xs text-gray-500">All-time finished</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -197,6 +256,105 @@ const Profile = ({ user }) => {
                                             <p className="text-xs text-gray-500">Want to Read</p>
                                         </div>
                                     </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+                                            <Target className="w-5 h-5 text-rose-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xl font-bold text-gray-800">
+                                                {yearlyGoal > 0 ? `${goalProgressPct}%` : '—'}
+                                            </p>
+                                            <p className="text-xs text-gray-500">
+                                                {yearlyGoal > 0 ? 'Goal progress' : 'Yearly target'}
+                                            </p>
+                                            {yearlyGoal > 0 && (
+                                                <p className="text-[11px] text-gray-400 mt-0.5">
+                                                    {booksThisYear} of {yearlyGoal} books
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Set yearly reading target (same card — always visible) */}
+                                <div className="mt-8 pt-8 border-t border-gray-100 w-full text-left">
+                                    <h2 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                        <Target className="w-5 h-5 text-rose-600 shrink-0" />
+                                        Reading goal for {new Date().getFullYear()}
+                                    </h2>
+
+                                    <div className="mb-4">
+                                        {yearlyGoal > 0 ? (
+                                            <>
+                                                <p className="text-lg font-bold text-gray-800 mb-1">
+                                                    {goalProgressPct}% completed
+                                                </p>
+                                                <p className="text-sm text-gray-600 mb-3">
+                                                    You&apos;ve read{' '}
+                                                    <span className="font-semibold text-gray-800">{booksThisYear}</span> of{' '}
+                                                    <span className="font-semibold text-gray-800">{yearlyGoal}</span> books
+                                                    toward your {new Date().getFullYear()} goal.
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p className="text-sm text-gray-600 mb-3">
+                                                <span className="font-semibold text-gray-800">{booksThisYear}</span> book
+                                                {booksThisYear !== 1 ? 's' : ''} finished this year — set a target below to
+                                                track % completed.
+                                            </p>
+                                        )}
+                                        <div
+                                            className="h-3 w-full bg-gray-100 rounded-full overflow-hidden"
+                                            role="progressbar"
+                                            aria-valuenow={yearlyGoal > 0 ? goalProgressPct : 0}
+                                            aria-valuemin={0}
+                                            aria-valuemax={100}
+                                            aria-label={
+                                                yearlyGoal > 0
+                                                    ? `${goalProgressPct}% completed: ${booksThisYear} of ${yearlyGoal} books`
+                                                    : 'Yearly goal not set'
+                                            }
+                                        >
+                                            <div
+                                                className="h-full bg-gradient-to-r from-primary to-emerald-500 rounded-full transition-all duration-500"
+                                                style={{
+                                                    width: `${yearlyGoal > 0 ? goalProgressPct : booksThisYear > 0 ? 100 : 0}%`,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <form onSubmit={handleSaveYearlyGoal}>
+                                        <label htmlFor="yearly-goal" className="block text-xs font-medium text-gray-600 mb-1">
+                                            Target number of books this year
+                                        </label>
+                                        <div className="flex flex-col sm:flex-row gap-3 sm:items-stretch">
+                                            <input
+                                                id="yearly-goal"
+                                                type="number"
+                                                min={0}
+                                                max={10000}
+                                                placeholder="e.g. 12"
+                                                value={goalInput}
+                                                onChange={(e) => setGoalInput(e.target.value)}
+                                                className="flex-1 min-w-0 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                            />
+                                            <button
+                                                type="submit"
+                                                disabled={goalSaving}
+                                                className="px-6 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 shrink-0"
+                                            >
+                                                {goalSaving ? 'Saving…' : 'Save target'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                    {goalMessage && (
+                                        <p
+                                            className={`text-sm mt-3 ${goalMessage.includes('saved') ? 'text-emerald-600' : 'text-amber-700'}`}
+                                        >
+                                            {goalMessage}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>

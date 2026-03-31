@@ -13,7 +13,7 @@ app.use((req, res, next) => {
     
     res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
     res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     
     
@@ -167,6 +167,40 @@ app.get('/auth/status', authcheck, async (req, res) => {
     }
 });
 
+async function handleUpdateYearlyGoal(req, res) {
+    try {
+        const userId = parseInt(req.params.userId, 10);
+        const authId = Number(req.user.id);
+        if (userId !== authId) {
+            return res.status(403).json({ error: 'You can only update your own reading goal' });
+        }
+        const { yearly_goal } = req.body;
+        const goal = Number(yearly_goal);
+        if (!Number.isFinite(goal) || goal < 0 || goal > 10000) {
+            return res.status(400).json({ error: 'yearly_goal must be a number between 0 and 10000' });
+        }
+        const updated = await prisma.users.update({
+            where: { user_id: userId },
+            data: { yearly_goal: Math.floor(goal) },
+            select: {
+                user_id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+                yearly_goal: true,
+                books_read_this_year: true
+            }
+        });
+        res.json({ message: 'Yearly goal updated', user: updated });
+    } catch (err) {
+        console.error('Error updating yearly goal:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+app.put('/users/:userId/yearly-goal', authcheck, handleUpdateYearlyGoal);
+app.patch('/users/:userId/yearly-goal', authcheck, handleUpdateYearlyGoal);
+
 app.get('/users/:id', async (req, res) => {
     try {
         const userId = parseInt(req.params.id);
@@ -269,6 +303,20 @@ app.post('/userBooks/:userId/books', authcheck, async (req, res) => {
             }
         });
 
+        if (userBook.have_read) {
+            const progressRow = await prisma.progress.findUnique({
+                where: {
+                    user_id_book_id: { user_id: userId, book_id: book_id }
+                }
+            });
+            if (!progressRow || progressRow.status !== 'Completed') {
+                await prisma.users.update({
+                    where: { user_id: userId },
+                    data: { books_read_this_year: { increment: 1 } }
+                });
+            }
+        }
+
         res.status(201).json({
             message: 'Book successfully added to user list',
             book: userBook
@@ -304,6 +352,15 @@ app.put('/userBooks/:userId/books/:bookId', authcheck, async (req, res) => {
             return res.status(404).json({ error: 'This book is not in your list'});
         }
 
+        const nextHaveRead = have_read !== undefined ? have_read : exists.have_read;
+        const nextWantToRead = want_to_read !== undefined ? want_to_read : exists.want_to_read;
+
+        const progressRow = await prisma.progress.findUnique({
+            where: {
+                user_id_book_id: { user_id: userId, book_id: bookId }
+            }
+        });
+
         const updated = await prisma.user_books.update({
             where: {
                 user_id_book_id: {
@@ -312,10 +369,33 @@ app.put('/userBooks/:userId/books/:bookId', authcheck, async (req, res) => {
                 }
             },
             data: {
-                have_read: have_read !== undefined ? have_read : exists.have_read,
-                want_to_read: want_to_read !== undefined ? want_to_read : exists.want_to_read
+                have_read: nextHaveRead,
+                want_to_read: nextWantToRead
             }
         });
+
+        // Yearly count: avoid double-count with progress "Completed" path
+        if (exists.have_read === false && nextHaveRead === true) {
+            if (!progressRow || progressRow.status !== 'Completed') {
+                await prisma.users.update({
+                    where: { user_id: userId },
+                    data: { books_read_this_year: { increment: 1 } }
+                });
+            }
+        } else if (exists.have_read === true && nextHaveRead === false) {
+            if (!progressRow || progressRow.status !== 'Completed') {
+                const u = await prisma.users.findUnique({
+                    where: { user_id: userId },
+                    select: { books_read_this_year: true }
+                });
+                if (u && u.books_read_this_year > 0) {
+                    await prisma.users.update({
+                        where: { user_id: userId },
+                        data: { books_read_this_year: { decrement: 1 } }
+                    });
+                }
+            }
+        }
 
         res.json({
             message: 'Book status successfully updated',
@@ -581,13 +661,43 @@ app.put('/progress/:userId/:bookId', authcheck, async (req, res) => {
         });
 
         if(status === 'Completed' && progress.status !== 'Completed') {
-            await prisma.users.update({
-                where: { user_id: req.user.id},
-                data: {
-                    books_read_this_year: {
-                        increment: 1
+            const ub = await prisma.user_books.findUnique({
+                where: {
+                    user_id_book_id: {
+                        user_id: req.user.id,
+                        book_id: bookId
                     }
-                    
+                }
+            });
+            // If already marked read (counted via userBooks), do not increment again
+            const shouldIncrementYearly = !ub || !ub.have_read;
+            if (shouldIncrementYearly) {
+                await prisma.users.update({
+                    where: { user_id: req.user.id},
+                    data: {
+                        books_read_this_year: {
+                            increment: 1
+                        }
+                    }
+                });
+            }
+
+            await prisma.user_books.upsert({
+                where: {
+                    user_id_book_id: {
+                        user_id: req.user.id,
+                        book_id: bookId
+                    }
+                },
+                create: {
+                    user_id: req.user.id,
+                    book_id: bookId,
+                    have_read: true,
+                    want_to_read: false
+                },
+                update: {
+                    have_read: true,
+                    want_to_read: false
                 }
             });
 

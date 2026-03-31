@@ -3,7 +3,7 @@ import ReviewCard from './ReviewCard';
 import { StarRating } from './BookCard';
 import { ArrowLeft, Plus } from 'lucide-react';
 
-const BookDetails = ({ book, user, onBack }) => {
+const BookDetails = ({ book, user, onBack, onUserUpdated }) => {
     const [reviews, setReviews] = useState([]);
     const [userNames, setUserNames] = useState({});
     const [loading, setLoading] = useState(true);
@@ -81,10 +81,9 @@ const BookDetails = ({ book, user, onBack }) => {
 
     useEffect(() => {
         fetchBookData();
-    }, [book.book_id, user?.user_id]);
+    }, [book.book_id, user?.user_id, user?.books_read_this_year]);
 
     const addBookToUserList = async (token, statusObj) => {
-        // Try to add the book to user's list
         const addRes = await fetch(`/api/userBooks/${user.user_id}/books`, {
             method: 'POST',
             headers: {
@@ -98,9 +97,10 @@ const BookDetails = ({ book, user, onBack }) => {
             })
         });
 
+        if (addRes.ok) return;
+
         if (addRes.status === 409) {
-            // Already in list — update
-            await fetch(`/api/userBooks/${user.user_id}/books/${book.book_id}`, {
+            const putRes = await fetch(`/api/userBooks/${user.user_id}/books/${book.book_id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -111,7 +111,15 @@ const BookDetails = ({ book, user, onBack }) => {
                     have_read: statusObj.have_read
                 })
             });
+            if (!putRes.ok) {
+                const err = await putRes.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to update book status');
+            }
+            return;
         }
+
+        const err = await addRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to add book to your list');
     };
 
 
@@ -131,7 +139,7 @@ const BookDetails = ({ book, user, onBack }) => {
         try {
             await addBookToUserList(token, newStatus);
             setUserBookStatus(newStatus);
-
+            if (typeof onUserUpdated === 'function') await onUserUpdated();
         } catch (err) {
             console.error('Failed to update status', err);
         } finally {
@@ -155,10 +163,12 @@ const BookDetails = ({ book, user, onBack }) => {
                         total_pages: book.total_pages
                     })
                 });
-                console.log(addRes);
-            }
-
-            else {
+                if (!addRes.ok) {
+                    const err = await addRes.json().catch(() => ({}));
+                    throw new Error(err.error || 'Could not start tracking this book');
+                }
+                setCurrentlyReading(true);
+            } else {
                 const delRes = await fetch(`/api/progress/${user.user_id}/${book.book_id}`, {
                     method: 'DELETE',
                     headers: {
@@ -166,10 +176,14 @@ const BookDetails = ({ book, user, onBack }) => {
                         'Authorization': `Bearer ${token}`
                     }
                 });
-                console.log(delRes);
+                if (!delRes.ok) {
+                    const err = await delRes.json().catch(() => ({}));
+                    throw new Error(err.error || 'Could not remove reading progress');
+                }
+                setCurrentlyReading(false);
             }
 
-            setCurrentlyReading(!currentlyReading);
+            if (typeof onUserUpdated === 'function') await onUserUpdated();
         } catch (err) {
             console.error('Failed to update progress', err);
         } finally {
